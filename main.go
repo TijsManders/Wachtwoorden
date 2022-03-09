@@ -1,100 +1,73 @@
-package generator
+package main
 
 import (
-	"crypto/rand"
 	"fmt"
-	"math/big"
-	"strings"
-)
-
-// lengte van wachtwoord opgeven
-
-// keuze uit tekens? getallen, letters, tekens, symbolen
-
-// genereer uit gekozen tekens en lengte
-
-// optioneel gebruiker kan wachtwoord invoeren en controleer of dit goed is
-const (
-	DefaultLength    = 16
-	DefaultLetterSet = "abcdefghijklmnopqrstuvwxyz"
-	DefaultNumberSet = "0123456789"
-	DefaultSymbolSet = "!$%^&*()_+{}:@[];'#<>?,./|\\-=?"
+	"generator"
+	"os"
 )
 
 var (
-	Defaultconfig = Config{
-		Length:                  DefaultLength,
-		IncludeNumbers:          true,
-		IncludeSymbols:          true,
-		IncludeLowercaseLetters: true,
-		IncludeUppercaseLetters: true,
-	}
+	rootCmd                    *cobra.Command
+	length                     uint
+	characterSet               string
+	includeSymbols             bool
+	includeNumbers             bool
+	includeLowercaseLetters    bool
+	includeUppercaseLetters    bool
+	excludeSimilarCharacters   bool
+	excludeAmbiguousCharacters bool
+	times                      uint
 )
 
-type Generator struct {
-	*Config
+func main() {
+	rootCmd = &cobra.Command{
+		Run:   generate,
+		Use:   "go-generate-password",
+		Short: "go-generate-password is a password generating engine.",
+		Long:  "go-generate-password is a password generating engine written in Go.",
+	}
+
+	rootCmd.PersistentFlags().UintVarP(&length, "length", "l", generator.DefaultConfig.Length, "Length of the password")
+	rootCmd.PersistentFlags().StringVar(&characterSet, "characters", generator.DefaultConfig.CharacterSet, "Character set for the config")
+	rootCmd.PersistentFlags().BoolVar(&includeSymbols, "symbols", generator.DefaultConfig.IncludeSymbols, "Include symbols")
+	rootCmd.PersistentFlags().BoolVar(&includeNumbers, "numbers", generator.DefaultConfig.IncludeNumbers, "Include numbers")
+	rootCmd.PersistentFlags().BoolVar(&includeLowercaseLetters, "lowercase", generator.DefaultConfig.IncludeLowercaseLetters, "Include lowercase letters")
+	rootCmd.PersistentFlags().BoolVar(&includeUppercaseLetters, "uppercase", generator.DefaultConfig.IncludeSymbols, "Include uppercase letters")
+	rootCmd.PersistentFlags().BoolVar(&excludeSimilarCharacters, "exclude-similar", generator.DefaultConfig.ExcludeSimilarCharacters, "Exclude similar characters")
+	rootCmd.PersistentFlags().BoolVar(&excludeAmbiguousCharacters, "exclude-ambiguous", generator.DefaultConfig.ExcludeAmbiguousCharacters, "Exclude ambiguous characters")
+	rootCmd.PersistentFlags().UintVarP(&times, "times", "n", 1, "How many passwords to generate")
+
+	err := rootCmd.Execute()
+	if err != nil {
+		fmt.Println(err.Error())
+		os.Exit(1)
+	}
 }
 
-func New(config *Config) (*Generator, error) {
-	if config == nil {
-		fmt.Println("Geen config opgegeven, default config wordt gebruikt")
-		config = &Defaultconfig
+func generate(_ *cobra.Command, args []string) {
+	config := generator.Config{
+		Length:                     length,
+		CharacterSet:               characterSet,
+		IncludeSymbols:             includeSymbols,
+		IncludeNumbers:             includeNumbers,
+		IncludeLowercaseLetters:    includeLowercaseLetters,
+		IncludeUppercaseLetters:    includeUppercaseLetters,
+		ExcludeSimilarCharacters:   excludeSimilarCharacters,
+		ExcludeAmbiguousCharacters: excludeAmbiguousCharacters,
+	}
+	g, err := generator.New(&config)
+	if err != nil {
+		fmt.Println(err.Error())
+		os.Exit(1)
 	}
 
-	if config.Characterset == "" {
-		config.Characterset = buildCharacterSet(config)
+	pwds, err := g.GenerateMany(times)
+	if err != nil {
+		fmt.Println(err.Error())
+		os.Exit(1)
 	}
 
-	return &Generator{Config: config}, nil
-}
-
-func buildCharacterSet(config *Config) string {
-	var characterSet string
-
-	if config.IncludeNumbers {
-		characterSet += DefaultNumberSet
+	for _, pwd := range pwds {
+		fmt.Println(pwd)
 	}
-
-	if config.IncludeSymbols {
-		characterSet += DefaultSymbolSet
-	}
-
-	if config.IncludeLowercaseLetters {
-		characterSet += DefaultLetterSet
-	}
-
-	if config.IncludeUppercaseLetters {
-		characterSet += strings.ToUpper(DefaultLetterSet)
-	}
-
-	return characterSet
-}
-
-func (g Generator) Generate() (*string, error) {
-	var generated string
-
-	characterSet := strings.Split(g.Config.Characterset, "")
-	max := big.NewInt(int64(len(characterSet)))
-
-	for i := 0; i < g.Config.Length; i++ {
-		val, err := rand.Int(rand.Reader, max)
-		if err != nil {
-			return nil, err
-		}
-		generated += characterSet[val.Int64()]
-	}
-	return &generated, nil
-}
-
-func (g Generator) GenerateMany(amount int) ([]string, error) {
-	var generated []string
-	for i := 0; i < amount; i++ {
-		str, err := g.Generate()
-		if err != nil {
-			return nil, err
-		}
-
-		generated = append(generated, *str)
-	}
-	return generated, nil
 }
